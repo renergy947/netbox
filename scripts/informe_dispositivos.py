@@ -61,11 +61,11 @@ class InformeGlobalPDF(Script):
         styles = getSampleStyleSheet()
 
         # --- PALETA DE COLORES EMPRESARIAL ---
-        COLOR_PRIMARIO = colors.HexColor('#1e40af') 
-        COLOR_TEXTO_OSCURO = colors.HexColor('#0f172a') 
-        COLOR_SUBTITULOS = colors.HexColor('#64748b') 
+        COLOR_PRIMARIO = colors.HexColor('#1e40af') # Azul Corporativo
+        COLOR_TEXTO_OSCURO = colors.HexColor('#0f172a') # Pizarra
+        COLOR_SUBTITULOS = colors.HexColor('#64748b') # Gris frío
         COLOR_LINEAS = colors.HexColor('#cbd5e1')
-        COLOR_CEBRA = colors.HexColor('#f8fafc') 
+        COLOR_CEBRA = colors.HexColor('#f8fafc') # Filas alternas
 
         # --- ESTILOS TIPOGRÁFICOS ---
         estilo_titulo = ParagraphStyle(
@@ -109,7 +109,7 @@ class InformeGlobalPDF(Script):
                 Paragraph("Ext.", estilo_cabecera_tabla)
             ]]
 
-            # Inyección de datos (Aplanado para evitar el error de sintaxis multilínea)
+            # Inyección de datos (Aplanado para evitar el error de sintaxis multilínea de Python 3.14)
             for dev in lista_devs:
                 ip = str(dev.primary_ip.address).split('/')[0] if dev.primary_ip else "—"
                 ddi = dev.custom_field_data.get('ddi') or "—"
@@ -147,8 +147,8 @@ class InformeGlobalPDF(Script):
         # Compilar e imprimir el PDF
         doc.build(story)
 
-        # 6. Enlace de descarga limpio en la salida web
+        # 6. Enlace de descarga limpio y relativo (Compatible con Local y DuckDNS)
         self.log_success("==========================================================")
         self.log_success("🚀 ¡PDF EMPRESARIAL POR GRUPO DE SITIOS GENERADO CON ÉXITO!")
-        self.log_success(f"Descárgalo aquí: http://localhost:8000/media/informes/{nombre_archivo}")
+        self.log_success(f"Descárgalo aquí: /media/informes/{nombre_archivo}")
         self.log_success("==========================================================")
