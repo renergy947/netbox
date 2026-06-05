@@ -142,9 +142,8 @@ class InformeGlobalPDF(Script):
         # Compilar e imprimir el PDF
         doc.build(story)
 
-        # 6. Salida en formato link nativo de NetBox
+        # 6. Mensaje de éxito final usando Markdown puro relativo
         self.log_success("==========================================================")
-        self.log_success("🚀 ¡PDF EMPRESARIAL POR GRUPO DE SITIOS GENERADO!")
-        # El formato [Texto](Ruta) crea un botón/enlace directo cliqueable en NetBox
-        self.log_success(f"### [📥 CLIC AQUÍ PARA DESCARGAR EL PDF](/media/informes/{nombre_archivo})")
+        self.log_success("🚀 ¡PDF EMPRESARIAL GENERADO CON ÉXITO!")
+        self.log_success(f"### [📥 HAZ CLIC AQUÍ PARA DESCARGAR EL PDF](/media/informes/{nombre_archivo})")
         self.log_success("==========================================================")
