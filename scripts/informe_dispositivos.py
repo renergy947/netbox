@@ -1,106 +1,150 @@
+import os
+from django.conf import settings
 from extras.scripts import Script, ObjectVar
-from dcim.models import Device, Region, SiteGroup, Site, Location, DeviceRole
+from dcim.models import Device, Region, SiteGroup, Site, Location
 
-class InformeGlobalDispositivos(Script):
+# Componentes de maquetación profesional PDF
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+
+class InformeGlobalPDF(Script):
     class Meta:
-        name = "Informe Avanzado de Dispositivos"
-        description = "Muestra activos filtrados por criterios geográficos opcionales y agrupados por su función (Rol)."
+        name = "Informe de Activos a PDF"
+        description = "Genera un documento PDF corporativo con diseño tecnológico, agrupado estrictamente por Grupos de Sitios."
 
-    # --- FILTROS NO RESTRICTIVOS (Todos required=False) ---
-    region = ObjectVar(
-        model=Region,
-        required=False,
-        label="Región",
-        description="Opcional: Filtrar por región geográfica"
-    )
-    site_group = ObjectVar(
-        model=SiteGroup,
-        required=False,
-        label="Grupo de Sitios",
-        description="Opcional: Filtrar por grupo organizativo de sedes"
-    )
-    site = ObjectVar(
-        model=Site,
-        required=False,
-        label="Sitio / Sede",
-        query_params={'region_id': '$region', 'group_id': '$site_group'},
-        description="Opcional: Filtrar por una sede específica"
-    )
-    location = ObjectVar(
-        model=Location,
-        required=False,
-        label="Ubicación específica",
-        query_params={'site_id': '$site'},
-        description="Opcional: Filtrar por un despacho, planta o cuarto técnico"
-    )
+    # --- FILTROS NO RESTRICTIVOS (Opcionales) ---
+    region = ObjectVar(model=Region, required=False, label="Región")
+    site_group = ObjectVar(model=SiteGroup, required=False, label="Grupo de Sitios")
+    site = ObjectVar(model=Site, required=False, label="Sitio / Sede", query_params={'region_id': '$region', 'group_id': '$site_group'})
+    location = ObjectVar(model=Location, required=False, label="Ubicación específica", query_params={'site_id': '$site'})
 
     def run(self, data, commit):
-        # Comenzamos con el universo completo de dispositivos de la BD
+        # 1. Recuperación y filtrado dinámico de datos de la BD
         dispositivos = Device.objects.all()
 
-        # Aplicación dinámica de filtros según lo que elijas en la web
-        if data['region']:
-            dispositivos = dispositivos.filter(site__region=data['region'])
-            self.log_info(f"Filtrando por Región: {data['region'].name}")
-            
-        if data['site_group']:
-            dispositivos = dispositivos.filter(site__group=data['site_group'])
-            self.log_info(f"Filtrando por Grupo de Sitios: {data['site_group'].name}")
-            
-        if data['site']:
-            dispositivos = dispositivos.filter(site=data['site'])
-            self.log_info(f"Filtrando por Sitio: {data['site'].name}")
-            
-        if data['location']:
-            dispositivos = dispositivos.filter(location=data['location'])
-            self.log_info(f"Filtrando por Ubicación: {data['location'].name}")
+        if data['region']: dispositivos = dispositivos.filter(site__region=data['region'])
+        if data['site_group']: dispositivos = dispositivos.filter(site__group=data['site_group'])
+        if data['site']: dispositivos = dispositivos.filter(site=data['site'])
+        if data['location']: dispositivos = dispositivos.filter(location=data['location'])
 
         if not dispositivos.exists():
-            self.log_warning("No se han encontrado dispositivos que cumplan los criterios seleccionados.")
+            self.log_warning("No se encontraron activos para los criterios seleccionados.")
             return
 
-        # --- AGRUPACIÓN POR FUNCIÓN DEL DISPOSITIVO (ROLE) ---
-        grupos_por_funcion = {}
+        # 2. --- AGRUPACIÓN POR GRUPO DE SITIOS ---
+        grupos_por_site_group = {}
         for dev in dispositivos:
-            # Regla NetBox 4.6: Acceso mediante el atributo unificado .role
-            funcion_name = dev.role.name if dev.role else "Sin Función / Rol Asignado"
+            # Acceso jerárquico: Dispositivo -> Sitio -> Grupo de Sitios
+            grupo_nombre = dev.site.group.name if (dev.site and dev.site.group) else "Sin Grupo de Sitios Asignado"
             
-            if funcion_name not in grupos_por_funcion:
-                grupos_por_funcion[funcion_name] = []
-            grupos_por_funcion[funcion_name].append(dev)
+            if grupo_nombre not in grupos_por_site_group:
+                grupos_por_site_group[grupo_nombre] = []
+            grupos_por_site_group[grupo_nombre].append(dev)
 
-        # --- RENDERIZADO DEL INFORME EN PANTALLA ---
-        for funcion, lista_devs in grupos_por_funcion.items():
-            # Título del bloque de función
-            self.log_info(f"==================================================")
-            self.log_info(f"🛠️ FUNCIÓN: {funcion.upper()} ({len(lista_devs)} dispositivos)")
-            self.log_info(f"==================================================")
-            
+        # 3. Preparación del archivo físico en el directorio 'media'
+        directorio_informes = os.path.join(settings.MEDIA_ROOT, 'informes')
+        os.makedirs(directorio_informes, exist_ok=True)
+        nombre_archivo = 'informe_activos_por_grupo_sitios.pdf'
+        ruta_completa_pdf = os.path.join(directorio_informes, nombre_archivo)
+
+        # 4. Configuración del documento A4
+        doc = SimpleDocTemplate(
+            ruta_completa_pdf, 
+            pagesize=A4, 
+            rightMargin=25, 
+            leftMargin=25, 
+            topMargin=25, 
+            bottomMargin=25
+        )
+        story = []
+        styles = getSampleStyleSheet()
+
+        # --- PALETA DE COLORES EMPRESARIAL TECNOLÓGICA ---
+        COLOR_PRIMARIO = colors.HexColor('#1e40af') # Azul Tech
+        COLOR_TEXTO_OSCURO = colors.HexColor('#0f172a') # Pizarra casi negro
+        COLOR_SUBTITULOS = colors.HexColor('#64748b') # Gris frío
+        COLOR_LINEAS = colors.HexColor('#cbd5e1')
+        COLOR_CEBRA = colors.HexColor('#f8fafc') # Fondo gris sutil intercalado
+
+        # --- ESTILOS TIPOGRÁFICOS ---
+        estilo_titulo = ParagraphStyle(
+            'DocTitle', parent=styles['Heading1'],
+            fontSize=22, textColor=COLOR_PRIMARIO, fontName='Helvetica-Bold', spaceAfter=4
+        )
+        estilo_sub = ParagraphStyle(
+            'DocSub', parent=styles['Normal'],
+            fontSize=9, textColor=COLOR_SUBTITULOS, fontName='Helvetica', spaceAfter=18
+        )
+        estilo_seccion = ParagraphStyle(
+            'SecTitle', parent=styles['Heading2'],
+            fontSize=12, textColor=COLOR_TEXTO_OSCURO, fontName='Helvetica-Bold',
+            spaceBefore=12, spaceAfter=6
+        )
+        estilo_cabecera_tabla = ParagraphStyle(
+            'TableHeader', parent=styles['Normal'],
+            fontSize=8.5, textColor=colors.white, fontName='Helvetica-Bold', leading=10
+        )
+        estilo_celda = ParagraphStyle(
+            'TableCell', parent=styles['Normal'],
+            fontSize=8, textColor=COLOR_TEXTO_OSCURO, fontName='Helvetica', leading=10
+        )
+
+        # 5. CONSTRUCCIÓN DEL CONTENIDO DEL DOCUMENTO
+        story.append(Paragraph("INFORME MAESTRO DE INFRAESTRUCTURA", estilo_titulo))
+        story.append(Paragraph("Enterprise Asset Intelligence Report • Clasificado por Grupos de Sitios", estilo_sub))
+        story.append(Spacer(1, 5))
+
+        # Iterar sobre los grupos de sitios mapeados
+        for grupo, lista_devs in grupos_por_site_group.items():
+            story.append(Paragraph(f"■ GRUPO DE SITIOS: {grupo.upper()}", estilo_seccion))
+
+            # Definición de la cabecera de la tabla
+            datos_tabla = [[
+                Paragraph("Nombre", estilo_cabecera_tabla),
+                Paragraph("Nº Serie", estilo_cabecera_tabla),
+                Paragraph("Dirección IP", estilo_cabecera_tabla),
+                Paragraph("Ubicación", estilo_cabecera_tabla),
+                Paragraph("DDI", estilo_cabecera_tabla),
+                Paragraph("Ext.", estilo_cabecera_tabla)
+            ]]
+
+            # Extracción de datos de los dispositivos pertenecientes a este grupo
             for dev in lista_devs:
-                # 1. Datos básicos obligatorios
-                nombre = dev.name if dev.name else "S/N (Sin Nombre)"
-                serial = dev.serial if dev.serial else "No registrado"
-                ubicacion = dev.location.name if dev.location else "[Sin Ubicación]"
+                ip = str(dev.primary_ip.address).split('/')[0] if dev.primary_ip else "—"
+                ddi = dev.custom_field_data.get('ddi') or "—"
+                ext = dev.custom_field_data.get('extension') or "—"
                 
-                # 2. Extracción limpia de la IP Primaria (si tiene una asignada)
-                ip_direccion = "Sin IP"
-                if dev.primary_ip:
-                    # Dividimos el CIDR (ej: 192.168.1.5/24) para mostrar solo la IP limpia
-                    ip_direccion = str(dev.primary_ip.address).split('/')[0]
+                datos_tabla.append([
+                    Paragraph(dev.name or "S/N", estilo_celda),
+                    Paragraph(dev.serial or "—", estilo_celda),
+                    Paragraph(ip, estilo_celda),
+                    Paragraph(dev.location.name if dev.location else "—", estilo_celda),
+                    Paragraph(str(ddi), estilo_celda),
+                    Paragraph(str(ext), estilo_celda)
+                ])
 
-                # 3. Extracción de campos personalizados solicitados (DDI y Extension)
-                ddi = dev.custom_field_data.get('ddi') or "N/A"
-                extension = dev.custom_field_data.get('extension') or "N/A"
+            # Renderizado estructural de la tabla con el ancho total del A4 útil
+            tabla_profesional = Table(datos_tabla, colWidths=[115, 85, 80, 115, 80, 70])
+            tabla_profesional.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), COLOR_PRIMARIO),
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('TOPPADDING', (0,0), (-1,-1), 5),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+                ('ROWBACKGROUNDS', (0,1), (-1,-1), [COLOR_CEBRA, colors.white]),
+                ('GRID', (0,0), (-1,-1), 0.5, COLOR_LINEAS),
+            ]))
 
-                # Construcción de la línea de output formateada
-                mensaje_linea = (
-                    f"💻 {nombre} | "
-                    f"🔢 S/N: {serial} | "
-                    f"🌐 IP: {ip_direccion} | "
-                    f"📍 Ubic: {ubicacion} | "
-                    f"🆔 DDI: {ddi} | "
-                    f"📞 Ext: {extension}"
-                )
-                
-                # Se pinta con el check verde de éxito para máxima legibilidad
-                self.log_success(mensaje_linea)
+            story.append(tabla_profesional)
+            story.append(Spacer(1, 10))
+
+        # Generar el binario final del documento PDF
+        doc.build(story)
+
+        # 6. Enlace de salida por consola
+        self.log_success("==========================================================")
+        self.log_success("🚀 ¡PDF EMPRESARIAL POR GRUPO DE SITIOS GENERADO CON ÉXITO!")
+        self.log_success(f"Descárgalo aquí: http://localhost:8000/media/informes/{nombre_archivo}")
+        self.log_success("==========================================================")
