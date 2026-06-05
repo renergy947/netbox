@@ -14,7 +14,7 @@ class InformeGlobalPDF(Script):
         name = "Informe de Activos a PDF"
         description = "Genera un documento PDF corporativo con diseño tecnológico, agrupado estrictamente por Grupos de Sitios."
 
-    # --- FILTROS NO RESTRICTIVOS (Todos opcionales) ---
+    # --- FILTROS NO RESTRICTIVOS ---
     region = ObjectVar(model=Region, required=False, label="Región")
     site_group = ObjectVar(model=SiteGroup, required=False, label="Grupo de Sitios")
     site = ObjectVar(model=Site, required=False, label="Sitio / Sede", query_params={'region_id': '$region', 'group_id': '$site_group'})
@@ -45,13 +45,6 @@ class InformeGlobalPDF(Script):
         # 3. Preparación del archivo físico en el directorio 'media'
         directorio_informes = os.path.join(settings.MEDIA_ROOT, 'informes')
         os.makedirs(directorio_informes, exist_ok=True)
-        
-        # Asegurar permisos de lectura en la carpeta informes para Nginx (chmod 755)
-        try:
-            os.chmod(directorio_informes, 0o755)
-        except Exception:
-            pass
-
         nombre_archivo = 'informe_activos_por_grupo_sitios.pdf'
         ruta_completa_pdf = os.path.join(directorio_informes, nombre_archivo)
 
@@ -102,11 +95,9 @@ class InformeGlobalPDF(Script):
         story.append(Paragraph("Enterprise Asset Intelligence Report • Clasificado por Grupos de Sitios", estilo_sub))
         story.append(Spacer(1, 5))
 
-        # Iterar sobre los grupos de sitios mapeados
         for grupo, lista_devs in grupos_por_site_group.items():
             story.append(Paragraph(f"■ GRUPO DE SITIOS: {grupo.upper()}", estilo_seccion))
 
-            # Estructura de cabecera de la tabla
             datos_tabla = [[
                 Paragraph("Nombre", estilo_cabecera_tabla),
                 Paragraph("Nº Serie", estilo_cabecera_tabla),
@@ -116,7 +107,6 @@ class InformeGlobalPDF(Script):
                 Paragraph("Ext.", estilo_cabecera_tabla)
             ]]
 
-            # Inyección de datos
             for dev in lista_devs:
                 ip = str(dev.primary_ip.address).split('/')[0] if dev.primary_ip else "—"
                 ddi = dev.custom_field_data.get('ddi') or "—"
@@ -133,7 +123,6 @@ class InformeGlobalPDF(Script):
                 ]
                 datos_tabla.append(fila)
 
-            # Aplicar diseño corporativo a la tabla
             tabla_profesional = Table(datos_tabla, colWidths=[115, 85, 80, 115, 80, 70])
             
             diseno_tabla = TableStyle([
@@ -153,19 +142,9 @@ class InformeGlobalPDF(Script):
         # Compilar e imprimir el PDF
         doc.build(story)
 
-        # Asegurar permisos de lectura pública para el archivo PDF final (chmod 644)
-        try:
-            os.chmod(ruta_completa_pdf, 0o644)
-        except Exception:
-            pass
-
-        # 6. Enlace de descarga dinámico (utiliza el dominio actual desde el que accedes)
-        # Obtenemos el protocolo y host directamente de la petición web activa si está disponible
-        base_url = ""
-        if hasattr(self, 'request') and self.request:
-            base_url = f"{self.request.scheme}://{self.request.get_host()}"
-
+        # 6. Salida en formato link nativo de NetBox
         self.log_success("==========================================================")
-        self.log_success("🚀 ¡PDF EMPRESARIAL POR GRUPO DE SITIOS GENERADO CON ÉXITO!")
-        self.log_success(f"Descárgalo aquí: {base_url}/media/informes/{nombre_archivo}")
+        self.log_success("🚀 ¡PDF EMPRESARIAL POR GRUPO DE SITIOS GENERADO!")
+        # El formato [Texto](Ruta) crea un botón/enlace directo cliqueable en NetBox
+        self.log_success(f"### [📥 CLIC AQUÍ PARA DESCARGAR EL PDF](/media/informes/{nombre_archivo})")
         self.log_success("==========================================================")
