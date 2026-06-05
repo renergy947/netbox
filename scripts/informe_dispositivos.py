@@ -45,6 +45,13 @@ class InformeGlobalPDF(Script):
         # 3. Preparación del archivo físico en el directorio 'media'
         directorio_informes = os.path.join(settings.MEDIA_ROOT, 'informes')
         os.makedirs(directorio_informes, exist_ok=True)
+        
+        # Asegurar permisos de lectura en la carpeta informes para Nginx (chmod 755)
+        try:
+            os.chmod(directorio_informes, 0o755)
+        except Exception:
+            pass
+
         nombre_archivo = 'informe_activos_por_grupo_sitios.pdf'
         ruta_completa_pdf = os.path.join(directorio_informes, nombre_archivo)
 
@@ -61,11 +68,11 @@ class InformeGlobalPDF(Script):
         styles = getSampleStyleSheet()
 
         # --- PALETA DE COLORES EMPRESARIAL ---
-        COLOR_PRIMARIO = colors.HexColor('#1e40af') # Azul Corporativo
-        COLOR_TEXTO_OSCURO = colors.HexColor('#0f172a') # Pizarra
-        COLOR_SUBTITULOS = colors.HexColor('#64748b') # Gris frío
+        COLOR_PRIMARIO = colors.HexColor('#1e40af') 
+        COLOR_TEXTO_OSCURO = colors.HexColor('#0f172a') 
+        COLOR_SUBTITULOS = colors.HexColor('#64748b') 
         COLOR_LINEAS = colors.HexColor('#cbd5e1')
-        COLOR_CEBRA = colors.HexColor('#f8fafc') # Filas alternas
+        COLOR_CEBRA = colors.HexColor('#f8fafc') 
 
         # --- ESTILOS TIPOGRÁFICOS ---
         estilo_titulo = ParagraphStyle(
@@ -109,14 +116,13 @@ class InformeGlobalPDF(Script):
                 Paragraph("Ext.", estilo_cabecera_tabla)
             ]]
 
-            # Inyección de datos (Aplanado para evitar el error de sintaxis multilínea de Python 3.14)
+            # Inyección de datos
             for dev in lista_devs:
                 ip = str(dev.primary_ip.address).split('/')[0] if dev.primary_ip else "—"
                 ddi = dev.custom_field_data.get('ddi') or "—"
                 ext = dev.custom_field_data.get('extension') or "—"
                 ubicacion_txt = dev.location.name if dev.location else "—"
                 
-                # Definición de la fila limpia
                 fila = [
                     Paragraph(dev.name or "S/N", estilo_celda),
                     Paragraph(dev.serial or "—", estilo_celda),
@@ -147,8 +153,19 @@ class InformeGlobalPDF(Script):
         # Compilar e imprimir el PDF
         doc.build(story)
 
-        # 6. Enlace de descarga limpio y relativo (Compatible con Local y DuckDNS)
+        # Asegurar permisos de lectura pública para el archivo PDF final (chmod 644)
+        try:
+            os.chmod(ruta_completa_pdf, 0o644)
+        except Exception:
+            pass
+
+        # 6. Enlace de descarga dinámico (utiliza el dominio actual desde el que accedes)
+        # Obtenemos el protocolo y host directamente de la petición web activa si está disponible
+        base_url = ""
+        if hasattr(self, 'request') and self.request:
+            base_url = f"{self.request.scheme}://{self.request.get_host()}"
+
         self.log_success("==========================================================")
         self.log_success("🚀 ¡PDF EMPRESARIAL POR GRUPO DE SITIOS GENERADO CON ÉXITO!")
-        self.log_success(f"Descárgalo aquí: /media/informes/{nombre_archivo}")
+        self.log_success(f"Descárgalo aquí: {base_url}/media/informes/{nombre_archivo}")
         self.log_success("==========================================================")
