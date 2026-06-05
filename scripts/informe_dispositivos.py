@@ -61,11 +61,11 @@ class InformeGlobalPDF(Script):
         styles = getSampleStyleSheet()
 
         # --- PALETA DE COLORES EMPRESARIAL ---
-        COLOR_PRIMARIO = colors.HexColor('#1e40af') # Azul Corporativo
-        COLOR_TEXTO_OSCURO = colors.HexColor('#0f172a') # Pizarra
-        COLOR_SUBTITULOS = colors.HexColor('#64748b') # Gris frío
+        COLOR_PRIMARIO = colors.HexColor('#1e40af') 
+        COLOR_TEXTO_OSCURO = colors.HexColor('#0f172a') 
+        COLOR_SUBTITULOS = colors.HexColor('#64748b') 
         COLOR_LINEAS = colors.HexColor('#cbd5e1')
-        COLOR_CEBRA = colors.HexColor('#f8fafc') # Filas alternas
+        COLOR_CEBRA = colors.HexColor('#f8fafc') 
 
         # --- ESTILOS TIPOGRÁFICOS ---
         estilo_titulo = ParagraphStyle(
@@ -99,7 +99,7 @@ class InformeGlobalPDF(Script):
         for grupo, lista_devs in grupos_por_site_group.items():
             story.append(Paragraph(f"■ GRUPO DE SITIOS: {grupo.upper()}", estilo_seccion))
 
-            # Estructura de cabecera de la tabla (Ancho total A4 útil = 545 puntos)
+            # Estructura de cabecera de la tabla
             datos_tabla = [[
                 Paragraph("Nombre", estilo_cabecera_tabla),
                 Paragraph("Nº Serie", estilo_cabecera_tabla),
@@ -109,15 +109,46 @@ class InformeGlobalPDF(Script):
                 Paragraph("Ext.", estilo_cabecera_tabla)
             ]]
 
-            # Inyección de datos
+            # Inyección de datos (Aplanado para evitar el error de sintaxis multilínea)
             for dev in lista_devs:
                 ip = str(dev.primary_ip.address).split('/')[0] if dev.primary_ip else "—"
                 ddi = dev.custom_field_data.get('ddi') or "—"
                 ext = dev.custom_field_data.get('extension') or "—"
+                ubicacion_txt = dev.location.name if dev.location else "—"
                 
-                datos_tabla.append([
+                # Definición de la fila limpia
+                fila = [
                     Paragraph(dev.name or "S/N", estilo_celda),
                     Paragraph(dev.serial or "—", estilo_celda),
                     Paragraph(ip, estilo_celda),
-                    Paragraph(dev.location.name if dev.location else "—", estilo_celda),
+                    Paragraph(ubicacion_txt, estilo_celda),
                     Paragraph(str(ddi), estilo_celda),
+                    Paragraph(str(ext), estilo_celda)
+                ]
+                datos_tabla.append(fila)
+
+            # Aplicar diseño corporativo a la tabla
+            tabla_profesional = Table(datos_tabla, colWidths=[115, 85, 80, 115, 80, 70])
+            
+            diseno_tabla = TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), COLOR_PRIMARIO),
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('TOPPADDING', (0,0), (-1,-1), 5),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+                ('ROWBACKGROUNDS', (0,1), (-1,-1), [COLOR_CEBRA, colors.white]),
+                ('GRID', (0,0), (-1,-1), 0.5, COLOR_LINEAS),
+            ])
+            tabla_profesional.setStyle(diseno_tabla)
+
+            story.append(tabla_profesional)
+            story.append(Spacer(1, 10))
+
+        # Compilar e imprimir el PDF
+        doc.build(story)
+
+        # 6. Enlace de descarga limpio en la salida web
+        self.log_success("==========================================================")
+        self.log_success("🚀 ¡PDF EMPRESARIAL POR GRUPO DE SITIOS GENERADO CON ÉXITO!")
+        self.log_success(f"Descárgalo aquí: http://localhost:8000/media/informes/{nombre_archivo}")
+        self.log_success("==========================================================")
